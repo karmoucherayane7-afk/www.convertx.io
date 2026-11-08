@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConvertX | Editor Pro</title>
+    <!-- Fuentes e Iconos -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary: #00f2fe;
+            --secondary: #4facfe;
+            --dark: #080a12;
+            --card: #151921;
+            --text: #ffffff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+        body {
+            background-color: var(--dark);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Fondo Animado */
+        .bg-animate {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 50%, #1a2a6c, #b21f1f, #fdbb2d);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            z-index: -1;
+            opacity: 0.2;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .container {
+            width: 90%;
+            max-width: 500px;
+            background: var(--card);
+            padding: 30px;
+            border-radius: 30px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        /* Zona de Carga */
+        .drop-zone {
+            border: 2px dashed #333;
+            padding: 40px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: 0.3s;
+            margin: 20px 0;
+            background: rgba(255,255,255,0.02);
+        }
+
+        .drop-zone:hover {
+            border-color: var(--primary);
+            background: rgba(0,242,254,0.05);
+        }
+
+        .drop-zone i { font-size: 50px; color: var(--primary); margin-bottom: 15px; }
+
+        /* Controles ocultos hasta que se sube la imagen */
+        #controls { display: none; margin-top: 20px; animation: fadeIn 0.5s; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            background: #222;
+            color: white;
+            border: 1px solid #444;
+            margin-bottom: 20px;
+            font-size: 1rem;
+        }
+
+        .btn {
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 15px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            cursor: pointer;
+            width: 100%;
+            transition: 0.3s;
+        }
+
+        .btn:hover { transform: scale(1.03); box-shadow: 0 0 20px rgba(0,242,254,0.4); }
+
+        #preview {
+            width: 100%;
+            max-height: 200px;
+            object-fit: contain;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            border: 1px solid #333;
+        }
+
+        .status { font-size: 0.8rem; margin-top: 15px; color: #888; }
+    </style>
+</head>
+<body>
+
+    <div class="bg-animate"></div>
+
+    <div class="container">
+        <h1>ConvertX</h1>
+        <p>Convertidor de imagen instantáneo</p>
+
+        <div class="drop-zone" id="dropZone">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <p id="instruction">Haz clic o arrastra una imagen</p>
+            <input type="file" id="fileInput" accept="image/*" style="display:none">
+        </div>
+
+        <div id="controls">
+            <img id="preview">
+            
+            <label style="display:block; text-align:left; font-size:0.8rem; margin-bottom:5px;">CONVERTIR A:</label>
+            <select id="format">
+                <option value="image/png">Archivo PNG</option>
+                <option value="image/jpeg">Archivo JPG</option>
+                <option value="image/webp">Archivo WEBP</option>
+            </select>
+
+            <button class="btn" id="downloadBtn">CONVERTIR Y GUARDAR</button>
+            <p class="status" id="status">Listo para procesar</p>
+        </div>
+    </div>
+
+    <!-- El "motor" invisible -->
+    <canvas id="engine" style="display:none;"></canvas>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const controls = document.getElementById('controls');
+        const preview = document.getElementById('preview');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const status = document.getElementById('status');
+        const engine = document.getElementById('engine');
+        const ctx = engine.getContext('2d');
+
+        let originalImg = new Image();
+
+        // 1. Al hacer clic en la zona, abrir selector de archivos
+        dropZone.onclick = () => fileInput.click();
+
+        // 2. Cuando el usuario elige una imagen
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    originalImg.src = event.target.result;
+                    originalImg.onload = () => {
+                        preview.src = originalImg.src;
+                        dropZone.style.display = 'none';
+                        controls.style.display = 'block';
+                        status.innerText = "Imagen cargada: " + file.name;
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        // 3. PROCESO DE CONVERSIÓN Y DESCARGA (LO QUE "HACE QUE FUNCIONE")
+        downloadBtn.onclick = () => {
+            status.innerText = "Procesando...";
+            const targetFormat = document.getElementById('format').value;
+            const extension = targetFormat.split('/')[1];
+
+            // Configuramos el motor (canvas) al tamaño de la foto
+            engine.width = originalImg.width;
+            engine.height = originalImg.height;
+            
+            // Dibujamos la foto en el motor
+            ctx.drawImage(originalImg, 0, 0);
+
+            // Extraemos la imagen convertida
+            // Usamos toDataURL porque es lo más compatible para descargas directas
+            try {
+                const convertedData = engine.toDataURL(targetFormat, 0.9);
+                
+                // Creamos un link de descarga "fantasma"
+                const link = document.createElement('a');
+                link.download = `imagen_convertida.${extension}`;
+                link.href = convertedData;
+                
+                // Forzamos el clic para que el navegador descargue
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                status.innerText = "¡Completado! Revisa tus descargas.";
+                status.style.color = "#00f2fe";
+            } catch (err) {
+                status.innerText = "Error al convertir. Intenta con otra imagen.";
+                status.style.color = "#ff4b2b";
+                console.error(err);
+            }
+        };
+    </script>
+</body>
+</html>
